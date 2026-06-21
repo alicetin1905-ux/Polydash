@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>POLYSCAN — Polymarket Liquidity Scanner</title>
+<style>
+  :root{
+    --bg:#0a0d12; --panel:#11151c; --panel2:#161b24; --line:#222a35; --line2:#2c3644;
+    --txt:#e7eaf0; --muted:#8b94a3; --dim:#5b6472;
+    --teal:#2dd4bf; --gold:#f5b841; --green:#34d399; --amber:#fbbf24; --red:#f87171; --violet:#a78bfa;
+    --mono: ui-monospace,'SF Mono','JetBrains Mono',Menlo,Consolas,monospace;
+    --sans: system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    background:var(--bg); color:var(--txt); font-family:var(--sans);
+    font-size:14px; line-height:1.4; -webkit-font-smoothing:antialiased;
+    padding-bottom:60px;
+  }
+  .wrap{max-width:1320px;margin:0 auto;padding:0 14px}
+
+  /* hairline accent */
+  .topbar{height:2px;background:linear-gradient(90deg,var(--teal),var(--gold));}
+
+  header{padding:18px 0 10px;border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+  .brand h1{font-family:var(--mono);font-size:19px;font-weight:600;letter-spacing:1px;margin:0}
+  .brand .tag{color:var(--dim);font-size:12px;font-family:var(--mono)}
+  .sub{color:var(--muted);font-size:12.5px;margin-top:4px;max-width:760px}
+
+  /* stat strip */
+  .stats{display:flex;gap:22px;flex-wrap:wrap;margin-top:12px;font-family:var(--mono)}
+  .stat{display:flex;flex-direction:column;gap:1px}
+  .stat .v{font-size:16px;font-weight:600}
+  .stat .l{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+  .stat .v.teal{color:var(--teal)} .stat .v.gold{color:var(--gold)}
+
+  /* controls */
+  .controls{display:flex;flex-direction:column;gap:10px;padding:14px 0}
+  .tabs{display:flex;gap:4px;flex-wrap:wrap}
+  .tab{
+    font-family:var(--mono);font-size:12px;padding:7px 13px;border:1px solid var(--line2);
+    background:var(--panel);color:var(--muted);border-radius:6px;cursor:pointer;letter-spacing:.4px;
+  }
+  .tab:hover{border-color:var(--dim);color:var(--txt)}
+  .tab.on{background:var(--panel2);color:var(--teal);border-color:var(--teal)}
+  .tab .hint{color:var(--dim);font-size:10px;margin-left:6px}
+  .tab.on .hint{color:var(--muted)}
+
+  .filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .fld{display:flex;flex-direction:column;gap:3px}
+  .fld label{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;font-family:var(--mono)}
+  .fld input, .fld select{
+    background:var(--panel);border:1px solid var(--line2);color:var(--txt);
+    border-radius:5px;padding:6px 8px;font-family:var(--mono);font-size:12px;min-width:0;
+  }
+  .fld input:focus,.fld select:focus{outline:none;border-color:var(--teal)}
+  .fld.grow{flex:1;min-width:180px}
+  .fld.grow input{width:100%}
+  .chk{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:12px;color:var(--muted);cursor:pointer;user-select:none;padding-top:14px}
+  .chk input{accent-color:var(--teal);width:14px;height:14px}
+
+  .btn{
+    font-family:var(--mono);font-size:12px;padding:8px 14px;border-radius:6px;cursor:pointer;
+    background:var(--teal);color:#04201c;border:1px solid var(--teal);font-weight:600;letter-spacing:.4px;
+  }
+  .btn:hover{filter:brightness(1.08)}
+  .btn.ghost{background:transparent;color:var(--muted);border-color:var(--line2);font-weight:500}
+  .btn.ghost:hover{color:var(--txt);border-color:var(--dim)}
+  .btn:disabled{opacity:.5;cursor:default;filter:none}
+
+  .qrow{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+
+  /* banners */
+  .banner{padding:11px 13px;border-radius:7px;font-family:var(--mono);font-size:12.5px;margin:6px 0;display:none}
+  .banner.show{display:block}
+  .banner.err{background:#2a1416;border:1px solid #5b2326;color:#ffb4b4}
+  .banner.err b{color:var(--red)}
+  .banner.note{background:#15110a;border:1px solid #3d3115;color:#e8d6a8}
+
+  /* table */
+  .head, .row{
+    display:grid;
+    grid-template-columns: minmax(210px,3.2fr) 64px 66px 86px 70px 70px 84px 78px 64px 96px;
+    gap:8px;align-items:center;
+  }
+  .head{
+    padding:9px 10px;border-bottom:1px solid var(--line2);position:sticky;top:0;background:var(--bg);z-index:5;
+    font-family:var(--mono);font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;
+  }
+  .head .s{cursor:pointer;user-select:none}
+  .head .s:hover{color:var(--muted)}
+  .head .s.act{color:var(--teal)}
+  .num{text-align:right;font-family:var(--mono)}
+  .row{
+    padding:10px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:12.5px;
+  }
+  .row:hover{background:var(--panel)}
+  .q{font-family:var(--sans);font-size:12.5px;line-height:1.3;color:var(--txt);
+     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .q .cat{display:block;font-family:var(--mono);font-size:9.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-top:3px}
+  .mut{color:var(--muted)} .dimv{color:var(--dim)}
+  .gold{color:var(--gold)} .teal{color:var(--teal)}
+  .pill{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:2px 7px;border-radius:20px;font-weight:600}
+  .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+  .red{color:var(--red)} .amber{color:var(--amber)} .green{color:var(--green)}
+  .bg-red{background:rgba(248,113,113,.13)} .bg-amber{background:rgba(251,191,36,.13)} .bg-green{background:rgba(52,211,153,.12)} .bg-grey{background:rgba(139,148,163,.12)}
+  .acts{display:flex;gap:5px;justify-content:flex-end}
+  .mini{font-family:var(--mono);font-size:10.5px;padding:4px 7px;border-radius:5px;background:var(--panel2);border:1px solid var(--line2);color:var(--muted);cursor:pointer}
+  .mini:hover{color:var(--txt);border-color:var(--dim)}
+  .scoreval{font-weight:600}
+
+  .empty{padding:50px 16px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:13px}
+  .empty b{display:block;color:var(--txt);margin-bottom:6px;font-size:14px}
+
+  /* modal */
+  .modal{position:fixed;inset:0;background:rgba(4,6,10,.72);display:none;align-items:flex-start;justify-content:center;padding:24px 14px;z-index:50;overflow-y:auto}
+  .modal.show{display:flex}
+  .sheet{background:var(--panel);border:1px solid var(--line2);border-radius:11px;max-width:640px;width:100%;padding:18px}
+  .sheet h2{font-family:var(--mono);font-size:14px;margin:0 0 2px;letter-spacing:.4px}
+  .sheet .qfull{font-size:13.5px;color:var(--txt);margin:4px 0 12px;line-height:1.35}
+  .xrow{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  .x{font-family:var(--mono);font-size:18px;color:var(--dim);cursor:pointer;line-height:1;padding:2px 6px}
+  .x:hover{color:var(--txt)}
+  .kv{display:flex;flex-wrap:wrap;gap:14px 26px;font-family:var(--mono);font-size:12px;margin:10px 0 4px}
+  .kv .k{color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:.5px;display:block}
+  .kv .val{font-size:13px}
+
+  /* order book ladder */
+  .ladder{margin-top:14px;font-family:var(--mono);font-size:12px}
+  .lhead{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:6px;color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding:0 2px 6px}
+  .lrow{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:6px;padding:3px 2px;position:relative;align-items:center}
+  .lrow .px{z-index:2}
+  .lrow .sz{z-index:2;color:var(--muted)}
+  .lrow .bar{height:14px;border-radius:3px;align-self:center}
+  .lrow.ask .px{color:var(--red)} .lrow.bid .px{color:var(--green)}
+  .lrow.ask .bar{background:rgba(248,113,113,.18)} .lrow.bid .bar{background:rgba(52,211,153,.16)}
+  .lrow.elig{background:rgba(245,184,65,.07);border-left:2px solid var(--gold);margin-left:-2px;padding-left:4px}
+  .midbar{display:flex;justify-content:space-between;padding:7px 4px;margin:5px 0;border-top:1px dashed var(--line2);border-bottom:1px dashed var(--line2);color:var(--gold);font-size:11px}
+  .rzone{font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5}
+  .rzone b{color:var(--gold)}
+  .raw{background:#0c0f15;border:1px solid var(--line2);border-radius:7px;padding:11px;font-family:var(--mono);font-size:11px;color:var(--muted);white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;margin-top:10px}
+  .lk{color:var(--teal);text-decoration:none;font-size:11.5px;font-family:var(--mono)}
+  .lk:hover{text-decoration:underline}
+
+  footer{margin-top:26px;padding:16px 0 8px;border-top:1px solid var(--line);color:var(--dim);font-size:11.5px;line-height:1.6;font-family:var(--mono)}
+  footer b{color:var(--muted)}
+
+  .spin{display:inline-block;width:12px;height:12px;border:2px solid var(--line2);border-top-color:var(--teal);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-1px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+
+  /* mobile */
+  @media(max-width:780px){
+    .head{display:none}
+    .row{grid-template-columns:1fr 1fr;gap:6px 10px;padding:13px 11px;border:1px solid var(--line);border-radius:9px;margin-bottom:9px;background:var(--panel)}
+    .row:hover{background:var(--panel)}
+    .cell{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+    .cell::before{content:attr(data-label);color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:.5px;font-weight:500}
+    .cell.q-cell{grid-column:1/-1}
+    .cell.q-cell::before{display:none}
+    .num{text-align:right}
+    .acts{grid-column:1/-1;justify-content:flex-start;margin-top:4px}
+    .acts::before{display:none}
+  }
+</style>
+</head>
+<body>
+<div class="topbar"></div>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <h1>POLYSCAN</h1>
+      <span class="tag">// polymarket liquidity &amp; spread radar</span>
+    </div>
+    <div class="sub">Read-only scan of active Polymarket markets. Ranks where maker edge sits — spread to capture, daily reward pools, and how close to resolution (catalyst risk). You earn by <b>providing</b> the spread, not taking it: zero maker fees + rebate + reward pool. Public Gamma/CLOB APIs, no keys.</div>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <div class="controls">
+    <div class="tabs" id="tabs">
+      <div class="tab on" data-view="farm">REWARD FARM<span class="hint">calm + fat pools</span></div>
+      <div class="tab" data-view="spread">SPREAD CAPTURE<span class="hint">wide + active</span></div>
+      <div class="tab" data-view="arb">ARB SCAN<span class="hint">indicative</span></div>
+      <div class="tab" data-view="all">ALL<span class="hint">by volume</span></div>
+    </div>
+
+    <div class="filters">
+      <div class="fld grow"><label>Search market</label><input id="f-q" placeholder="filter by question text…"></div>
+      <div class="fld"><label>Min volume $</label><input id="f-vol" type="number" value="0" style="width:100px"></div>
+      <div class="fld"><label>Max days to resolve</label><input id="f-days" type="number" placeholder="any" style="width:120px"></div>
+      <div class="fld"><label>Min reward $/day</label><input id="f-rew" type="number" value="0" style="width:120px"></div>
+      <label class="chk"><input type="checkbox" id="f-rewonly"> reward-enabled only</label>
+    </div>
+
+    <div class="qrow">
+      <div class="fld grow"><label>Gamma query (editable)</label><input id="f-query" value="markets?closed=false&active=true&limit=500"></div>
+      <div class="fld"><label>CORS proxy prefix (optional)</label><input id="f-proxy" placeholder="https://your-proxy/?url=" style="width:200px"></div>
+      <div class="fld"><label>Auto-refresh</label>
+        <select id="f-auto"><option value="0">off</option><option value="20">20s</option><option value="45">45s</option><option value="90">90s</option></select>
+      </div>
+      <button class="btn" id="scan">SCAN</button>
+    </div>
+
+    <div class="banner err" id="err"></div>
+    <div class="banner note" id="note"></div>
+  </div>
+
+  <div class="head" id="thead">
+    <div>Market</div>
+    <div class="num s" data-k="mid">Mid</div>
+    <div class="num s act" data-k="spread">Spread</div>
+    <div class="num s" data-k="rewardRate">Reward/d</div>
+    <div class="num s" data-k="rewardMaxSpread">Max Spr</div>
+    <div class="num s" data-k="rewardMinSize">Min Sz</div>
+    <div class="num s" data-k="vol">Volume</div>
+    <div class="num s" data-k="days">Resolves</div>
+    <div class="num s act" data-k="score">Score</div>
+    <div class="num"></div>
+  </div>
+  <div id="rows"></div>
+
+  <footer>
+    <div><b>Score</b> = heuristic (tune in CONFIG). Farm: reward pool ÷ √existing-liquidity × calmness (longer to resolution = safer). Spread: spread × log(volume), mid-weighted.</div>
+    <div><b>Catalyst flag</b> <span class="red">●</span> &lt;7d &nbsp; <span class="amber">●</span> 7–30d &nbsp; <span class="green">●</span> &gt;30d. The killer is adverse selection — tight quotes fill right before a gap. Long-dated calm markets are the farm.</div>
+    <div><b>Arb scan</b> groups neg-risk events and sums outcome asks; edge = 1 − Σask. <b>Indicative only</b> — ignores depth, fees, capital lock to resolution. Verify the live book before trading.</div>
+    <div style="margin-top:6px;color:var(--dim)">Reward/Max-Spr/Min-Sz fields depend on Gamma's live schema — if a column reads "—" the field name may differ; hit <span class="mut">raw</span> on any row to see the actual object and tell me what to map.</div>
+  </footer>
+</div>
+
+<!-- drill-down modal -->
+<div class="modal" id="modal">
+  <div class="sheet" id="sheet"></div>
+</div>
+
+<script>
+"use strict";
+
+/* ============ CONFIG — tune these ============ */
+const CONFIG = {
+  GAMMA: "https://gamma-api.polymarket.com",
+  CLOB:  "https://clob.polymarket.com",
+  W_REWARD: 1.0,        // farm-score weight
+  W_SPREAD: 1.0,        // spread-score weight
+  CALM_DAYS: 30,        // days-to-resolution treated as "calm"
+  RISK_RED_DAYS: 7,
+  RISK_AMBER_DAYS: 30,
+  ARB_MIN_EDGE: 0.005,  // min Σ-deviation (in $) to flag an arb group
+  ARB_MIN_LEGS: 3,
+};
+/* rebate share of taker fees paid to makers, by category (approx, current schedule) */
+const REBATE = { crypto:20, finance:50, geopolitics:0 /*fee-free*/, _default:25 };
+
+/* ============ state ============ */
+let MARKETS = [];          // normalized
+let VIEW = "farm";
+let SORT = { k:"score", dir:-1 };
+let timer = null;
+
+/* ============ helpers ============ */
+const $ = s => document.querySelector(s);
+const num = v => { const n = parseFloat(v); return isFinite(n) ? n : null; };
+const clamp = (x,a,b) => Math.max(a, Math.min(b, x));
+const esc = s => String(s==null?"":s).replace(/[<>&]/g, c=>({"<":"&lt;",">":"&gt;","&":"&amp;"}[c]));
+function jarr(v){ try{ return typeof v==="string"?JSON.parse(v):(Array.isArray(v)?v:[]); }catch(e){ return []; } }
+function fmtMoney(n){ if(n==null) return "—"; const a=Math.abs(n);
+  if(a>=1e6) return "$"+(n/1e6).toFixed(1)+"M"; if(a>=1e3) return "$"+(n/1e3).toFixed(1)+"k"; return "$"+n.toFixed(0); }
+function fmtNum(n){ if(n==null) return "—"; const a=Math.abs(n);
+  if(a>=1e6) return (n/1e6).toFixed(1)+"M"; if(a>=1e3) return (n/1e3).toFixed(1)+"k"; return n.toFixed(0); }
+function cents(p){ return p==null ? "—" : (p*100).toFixed(1)+"¢"; }
+
+/* ============ fetch + normalize ============ */
+function proxied(u){ const p=$("#f-proxy").value.trim(); return p ? p+encodeURIComponent(u) : u; }
+
+async function getJSON(url){
+  const res = await fetch(proxied(url), { headers:{ "Accept":"application/json" } });
+  if(!res.ok) throw new Error("HTTP "+res.status+" "+res.statusText);
+  return res.json();
+}
+
+function normalize(m){
+  const outcomes = jarr(m.outcomes);
+  const prices   = jarr(m.outcomePrices).map(num);
+  const tokenIds = jarr(m.clobTokenIds);
+  const bestBid  = num(m.bestBid);
+  const bestAsk  = num(m.bestAsk);
+  let spread     = num(m.spread);
+  if(spread==null && bestBid!=null && bestAsk!=null) spread = bestAsk - bestBid;
+  const mid = (bestBid!=null && bestAsk!=null) ? (bestBid+bestAsk)/2 : (prices.length?prices[0]:null);
+  const end = m.endDate || m.endDateIso || m.end_date_iso || null;
+  const days = end ? (new Date(end).getTime() - Date.now())/864e5 : null;
+
+  let rewardRate = num(m.rewardsDailyRate);
+  if(rewardRate==null && Array.isArray(m.clobRewards) && m.clobRewards.length){
+    const r = m.clobRewards[0];
+    rewardRate = num(r.rewardsDailyRate) ?? num(r.rewardsAmount) ?? null;
+  }
+  const rewardMaxSpread = num(m.rewardsMaxSpread) ?? num(m.rewards_max_spread);
+  const rewardMinSize   = num(m.rewardsMinSize)   ?? num(m.rewards_min_size);
+
+  const vol = num(m.volumeNum) ?? num(m.volume) ?? num(m.volume24hr) ?? 0;
+  const liq = num(m.liquidityNum) ?? num(m.liquidity) ?? 0;
+  const negRiskId = m.negRiskMarketID || m.negRiskMarketId || m.neg_risk_market_id || null;
+  const cat = (m.category || (Array.isArray(m.tags)&&m.tags[0] && (m.tags[0].label||m.tags[0])) || "").toString();
+
+  const x = { raw:m, question:m.question||m.title||"—", slug:m.slug||"",
+    outcomes, prices, tokenIds, bestBid, bestAsk, spread, mid, end, days,
+    rewardRate, rewardMaxSpread, rewardMinSize, vol, liq, negRiskId, cat,
+    book: m.enableOrderBook ?? m.enable_order_book ?? true };
+  x.farm = farmScore(x); x.sprd = spreadScore(x);
+  return x;
+}
+
+function farmScore(x){
+  if(!x.rewardRate || x.rewardRate<=0) return 0;
+  const calm = clamp((x.days ?? 0)/CONFIG.CALM_DAYS, 0.1, 3);
+  const comp = Math.sqrt(Math.max(x.liq, 100));
+  return CONFIG.W_REWARD * (x.rewardRate / comp) * calm * 100;
+}
+function spreadScore(x){
+  if(x.spread==null) return 0;
+  const c = x.spread*100;
+  const act = Math.log10(Math.max(x.vol,10));
+  const midF = x.mid!=null ? (1 - Math.abs(x.mid-0.5)) : 0.5;
+  return CONFIG.W_SPREAD * c * act * (0.5 + 0.5*midF);
+}
+function risk(days){
+  if(days==null) return {k:"grey",label:"?"};
+  if(days < CONFIG.RISK_RED_DAYS)   return {k:"red",  label:Math.max(0,Math.round(days))+"d"};
+  if(days < CONFIG.RISK_AMBER_DAYS) return {k:"amber",label:Math.round(days)+"d"};
+  if(days > 400) return {k:"green",label:(days/365).toFixed(1)+"y"};
+  return {k:"green",label:Math.round(days)+"d"};
+}
+function rebatePct(cat){
+  const c = (cat||"").toLowerCase();
+  for(const key in REBATE){ if(key!=="_default" && c.includes(key)) return REBATE[key]; }
+  return REBATE._default;
+}
+
+async function scan(){
+  const btn=$("#scan"); btn.disabled=true; btn.innerHTML='<span class="spin"></span> SCAN';
+  $("#err").classList.remove("show"); $("#note").classList.remove("show");
+  try{
+    const q = $("#f-query").value.trim().replace(/^\/+/,"");
+    const data = await getJSON(`${CONFIG.GAMMA}/${q}`);
+    const arr = Array.isArray(data) ? data : (data.data || data.markets || []);
+    if(!arr.length) throw new Error("API returned 0 markets — check the query.");
+    MARKETS = arr.map(normalize);
+    renderStats(); render();
+  }catch(e){
+    showErr(e);
+  }finally{
+    btn.disabled=false; btn.textContent="SCAN";
+  }
+}
+
+function showErr(e){
+  const msg = (e && e.message) || String(e);
+  const corsLike = /Failed to fetch|NetworkError|Load failed/i.test(msg);
+  $("#err").innerHTML = `<b>Scan failed:</b> ${esc(msg)}` + (corsLike
+    ? `<br>Looks like a network/CORS block. The public Polymarket APIs normally allow browser access over <b>https</b> — serve this from GitHub Pages rather than file://, or paste a CORS-proxy prefix above and retry.`
+    : ``);
+  $("#err").classList.add("show");
+}
+
+/* ============ render ============ */
+function renderStats(){
+  const n=MARKETS.length;
+  const rew=MARKETS.filter(m=>m.rewardRate>0);
+  const pool=rew.reduce((s,m)=>s+(m.rewardRate||0),0);
+  const sp=MARKETS.filter(m=>m.spread!=null);
+  const avg=sp.length? sp.reduce((s,m)=>s+m.spread,0)/sp.length : null;
+  $("#stats").innerHTML = `
+    <div class="stat"><span class="v">${n}</span><span class="l">markets scanned</span></div>
+    <div class="stat"><span class="v teal">${rew.length}</span><span class="l">reward-enabled</span></div>
+    <div class="stat"><span class="v gold">${fmtMoney(pool)}</span><span class="l">daily rewards seen</span></div>
+    <div class="stat"><span class="v">${avg!=null?cents(avg):"—"}</span><span class="l">avg spread</span></div>
+    <div class="stat"><span class="v dimv" style="font-size:12px">${new Date().toLocaleTimeString()}</span><span class="l">last scan</span></div>`;
+}
+
+function activeList(){
+  const qf=$("#f-q").value.trim().toLowerCase();
+  const minVol=num($("#f-vol").value)||0;
+  const maxDays=num($("#f-days").value);
+  const minRew=num($("#f-rew").value)||0;
+  const rewOnly=$("#f-rewonly").checked;
+
+  let list=MARKETS.filter(m=>{
+    if(qf && !m.question.toLowerCase().includes(qf)) return false;
+    if(m.vol < minVol) return false;
+    if(maxDays!=null && (m.days==null || m.days>maxDays)) return false;
+    if((m.rewardRate||0) < minRew) return false;
+    if(rewOnly && !(m.rewardRate>0)) return false;
+    return true;
+  });
+
+  if(VIEW==="farm"){ list=list.filter(m=>m.rewardRate>0 || m.rewardMaxSpread!=null); SORT={k:"score",dir:-1}; }
+  else if(VIEW==="spread"){ list=list.filter(m=>m.spread!=null && m.book!==false); SORT={k:"score",dir:-1}; }
+
+  const key = SORT.k==="score" ? (VIEW==="farm"?"farm":VIEW==="spread"?"sprd":"vol") : SORT.k;
+  list.sort((a,b)=>{
+    const av=a[key], bv=b[key];
+    if(av==null && bv==null) return 0; if(av==null) return 1; if(bv==null) return -1;
+    return (av-bv)*SORT.dir;
+  });
+  return list;
+}
+
+function render(){
+  if(VIEW==="arb"){ renderArb(); return; }
+  $("#thead").style.display="";
+  const list=activeList();
+  const rows=$("#rows");
+  if(!list.length){ rows.innerHTML=`<div class="empty"><b>No markets match.</b>Widen the filters or hit SCAN to load fresh data.</div>`; return; }
+
+  rows.innerHTML = list.slice(0,150).map((m,i)=>{
+    const rk=risk(m.days);
+    const sc = VIEW==="farm"?m.farm : VIEW==="spread"?m.sprd : m.vol;
+    const scTxt = VIEW==="all" ? fmtMoney(m.vol) : sc.toFixed(1);
+    const scCls = sc>0 ? (VIEW==="farm"?"gold":"teal") : "dimv";
+    return `<div class="row">
+      <div class="cell q-cell"><div class="q">${esc(m.question)}<span class="cat">${esc(m.cat||"·")}</span></div></div>
+      <div class="cell num" data-label="Mid"><span class="mut">${cents(m.mid)}</span></div>
+      <div class="cell num" data-label="Spread">${m.spread!=null?`<span>${cents(m.spread)}</span>`:`<span class="dimv">—</span>`}</div>
+      <div class="cell num" data-label="Reward/d">${m.rewardRate>0?`<span class="gold">${fmtMoney(m.rewardRate)}</span>`:`<span class="dimv">—</span>`}</div>
+      <div class="cell num" data-label="Max Spr">${m.rewardMaxSpread!=null?`<span class="mut">${m.rewardMaxSpread}¢</span>`:`<span class="dimv">—</span>`}</div>
+      <div class="cell num" data-label="Min Sz">${m.rewardMinSize!=null?`<span class="mut">${fmtNum(m.rewardMinSize)}</span>`:`<span class="dimv">—</span>`}</div>
+      <div class="cell num" data-label="Volume"><span class="mut">${fmtMoney(m.vol)}</span></div>
+      <div class="cell num" data-label="Resolves"><span class="pill bg-${rk.k} ${rk.k==='grey'?'mut':rk.k}"><span class="dot" style="background:currentColor"></span>${rk.label}</span></div>
+      <div class="cell num" data-label="Score"><span class="scoreval ${scCls}">${scTxt}</span></div>
+      <div class="cell acts"><button class="mini" onclick="openBook(${i})" data-i="${i}">book</button><button class="mini" onclick="openRaw(${i})">raw</button></div>
+    </div>`;
+  }).join("");
+  // stash current list for modal lookups
+  render._list=list;
+}
+
+function renderArb(){
+  $("#thead").style.display="none";
+  const groups={};
+  MARKETS.forEach(m=>{ if(m.negRiskId){ (groups[m.negRiskId]=groups[m.negRiskId]||[]).push(m); } });
+  let out=Object.values(groups)
+    .filter(g=>g.length>=CONFIG.ARB_MIN_LEGS)
+    .map(g=>{
+      const legs=g.filter(m=>m.bestAsk!=null);
+      const sum=legs.reduce((s,m)=>s+m.bestAsk,0);
+      return { g, legs:legs.length, sum, edge:1-sum };
+    })
+    .filter(r=>r.legs>=CONFIG.ARB_MIN_LEGS)
+    .sort((a,b)=>b.edge-a.edge);
+
+  const rows=$("#rows");
+  if(!out.length){
+    rows.innerHTML=`<div class="empty"><b>No neg-risk groups in this pull.</b>Arb scan needs multi-outcome (neg-risk) events. If the field name differs in the live data, open any row's <span class="mut">raw</span> and tell me which key holds the group id.</div>`;
+    return;
+  }
+  $("#note").innerHTML="⚠ Indicative. Σask &lt; $1.00 ⇒ buying every outcome's YES pays $1 at resolution. Ignores depth, fees, and capital locked to resolution — confirm the live book before trading.";
+  $("#note").classList.add("show");
+
+  rows.innerHTML = out.slice(0,60).map(r=>{
+    const pos = r.edge>=CONFIG.ARB_MIN_EDGE;
+    const head=r.g[0];
+    return `<div class="row" style="grid-template-columns:minmax(220px,3fr) 90px 90px 110px;">
+      <div class="cell q-cell"><div class="q">${esc(head.question.replace(/—.*$/,'').trim())}<span class="cat">${r.legs} outcomes · ${esc(head.cat||'·')}</span></div></div>
+      <div class="cell num" data-label="Σ ask"><span class="mut">${(r.sum*100).toFixed(1)}¢</span></div>
+      <div class="cell num" data-label="Edge"><span class="${pos?'green':'dimv'}">${r.edge>0?'+':''}${(r.edge*100).toFixed(2)}¢</span></div>
+      <div class="cell num" data-label="Status"><span class="pill ${pos?'bg-green green':'bg-grey mut'}">${pos?'POTENTIAL':'no edge'}</span></div>
+    </div>`;
+  }).join("");
+}
+
+/* ============ modals ============ */
+function listRef(i){ return (VIEW==="arb"?MARKETS:(render._list||MARKETS))[i]; }
+
+async function openBook(i){
+  const m=listRef(i); if(!m) return;
+  const modal=$("#modal"), sheet=$("#sheet");
+  const rk=risk(m.days), reb=rebatePct(m.cat);
+  sheet.innerHTML = `
+    <div class="xrow"><div><h2>ORDER BOOK</h2></div><div class="x" onclick="closeModal()">✕</div></div>
+    <div class="qfull">${esc(m.question)}</div>
+    <div class="kv">
+      <div><span class="k">Resolves</span><span class="val ${rk.k==='grey'?'mut':rk.k}">${rk.label}</span></div>
+      <div><span class="k">Category</span><span class="val mut">${esc(m.cat||'—')}</span></div>
+      <div><span class="k">Maker rebate</span><span class="val gold">${reb}%</span></div>
+      <div><span class="k">Reward pool</span><span class="val ${m.rewardRate>0?'gold':'mut'}">${m.rewardRate>0?fmtMoney(m.rewardRate)+'/d':'—'}</span></div>
+      <div><span class="k">Reward band</span><span class="val mut">${m.rewardMaxSpread!=null?'±'+m.rewardMaxSpread+'¢':'—'}</span></div>
+      <div><span class="k">Min size</span><span class="val mut">${m.rewardMinSize!=null?fmtNum(m.rewardMinSize):'—'}</span></div>
+    </div>
+    <div id="lad" class="ladder"><div class="empty" style="padding:24px"><span class="spin"></span> loading book…</div></div>
+    ${m.slug?`<a class="lk" href="https://polymarket.com/event/${esc(m.slug)}" target="_blank" rel="noopener">open on polymarket ↗</a>`:''}`;
+  modal.classList.add("show");
+
+  const tid = m.tokenIds && m.tokenIds[0];
+  if(!tid){ $("#lad").innerHTML=`<div class="empty" style="padding:20px">No CLOB token id on this market.</div>`; return; }
+  try{
+    const b = await getJSON(`${CONFIG.CLOB}/book?token_id=${tid}`);
+    renderLadder(b, m);
+  }catch(e){
+    $("#lad").innerHTML=`<div class="banner err show">Couldn't load book: ${esc((e&&e.message)||e)}</div>`;
+  }
+}
+
+function renderLadder(b, m){
+  let asks=(b.asks||[]).map(o=>({p:num(o.price),s:num(o.size)})).filter(o=>o.p!=null);
+  let bids=(b.bids||[]).map(o=>({p:num(o.price),s:num(o.size)})).filter(o=>o.p!=null);
+  asks.sort((a,c)=>a.p-c.p); bids.sort((a,c)=>c.p-a.p);
+  const bestAsk=asks.length?asks[0].p:null, bestBid=bids.length?bids[0].p:null;
+  const mid = (bestAsk!=null&&bestBid!=null)?(bestAsk+bestBid)/2:(m.mid);
+  const band = m.rewardMaxSpread!=null ? m.rewardMaxSpread/100 : null;
+  const maxSz=Math.max(1,...asks.slice(0,8).map(o=>o.s),...bids.slice(0,8).map(o=>o.s));
+  const elig=p=> band!=null && mid!=null && Math.abs(p-mid)<=band;
+
+  const askRows=asks.slice(0,8).reverse().map(o=>`
+    <div class="lrow ask ${elig(o.p)?'elig':''}">
+      <div class="px">${(o.p*100).toFixed(1)}¢</div><div class="sz">${fmtNum(o.s)}</div>
+      <div class="bar" style="width:${Math.max(4,o.s/maxSz*100)}%"></div></div>`).join("");
+  const bidRows=bids.slice(0,8).map(o=>`
+    <div class="lrow bid ${elig(o.p)?'elig':''}">
+      <div class="px">${(o.p*100).toFixed(1)}¢</div><div class="sz">${fmtNum(o.s)}</div>
+      <div class="bar" style="width:${Math.max(4,o.s/maxSz*100)}%"></div></div>`).join("");
+  const sprd = (bestAsk!=null&&bestBid!=null)?((bestAsk-bestBid)*100).toFixed(1)+"¢":"—";
+
+  $("#lad").innerHTML = `
+    <div class="lhead"><div>price</div><div>size</div><div>depth</div></div>
+    ${askRows||'<div class="lrow"><div class="dimv">no asks</div></div>'}
+    <div class="midbar"><span>mid ${mid!=null?(mid*100).toFixed(1)+'¢':'—'}</span><span>spread ${sprd}</span></div>
+    ${bidRows||'<div class="lrow"><div class="dimv">no bids</div></div>'}
+    <div class="rzone">${band!=null
+      ? `<b>Gold band</b> = reward-eligible: quote within ±${m.rewardMaxSpread}¢ of mid${m.rewardMinSize!=null?` at ≥ ${fmtNum(m.rewardMinSize)} size`:''} to earn the pool. Tighter scores higher (quadratic) but fills sooner — that's the adverse-selection trade.`
+      : `No reward band on this market — spread capture + rebate only.`}</div>`;
+}
+
+function openRaw(i){
+  const m=listRef(i); if(!m) return;
+  $("#sheet").innerHTML = `
+    <div class="xrow"><div><h2>RAW MARKET OBJECT</h2></div><div class="x" onclick="closeModal()">✕</div></div>
+    <div class="qfull">${esc(m.question)}</div>
+    <div class="rzone">Field reference — if a metric showed "—", find its real key here and tell me what to map.</div>
+    <div class="raw">${esc(JSON.stringify(m.raw,null,2))}</div>`;
+  $("#modal").classList.add("show");
+}
+function closeModal(){ $("#modal").classList.remove("show"); }
+
+/* ============ wiring ============ */
+$("#tabs").addEventListener("click", e=>{
+  const t=e.target.closest(".tab"); if(!t) return;
+  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("on"));
+  t.classList.add("on"); VIEW=t.dataset.view;
+  $("#note").classList.remove("show");
+  if(MARKETS.length) render();
+});
+$("#thead").addEventListener("click", e=>{
+  const s=e.target.closest(".s"); if(!s) return;
+  const k=s.dataset.k;
+  if(SORT.k===k) SORT.dir*=-1; else SORT={k,dir:-1};
+  document.querySelectorAll("#thead .s").forEach(x=>x.classList.remove("act"));
+  s.classList.add("act"); render();
+});
+["#f-q","#f-vol","#f-days","#f-rew"].forEach(id=>$(id).addEventListener("input", ()=>{ if(MARKETS.length) render(); }));
+$("#f-rewonly").addEventListener("change", ()=>{ if(MARKETS.length) render(); });
+$("#scan").addEventListener("click", scan);
+$("#f-auto").addEventListener("change", e=>{
+  if(timer){ clearInterval(timer); timer=null; }
+  const s=parseInt(e.target.value,10);
+  if(s>0) timer=setInterval(scan, s*1000);
+});
+$("#modal").addEventListener("click", e=>{ if(e.target.id==="modal") closeModal(); });
+document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeModal(); });
+window.openBook=openBook; window.openRaw=openRaw; window.closeModal=closeModal;
+
+/* auto-run first scan */
+scan();
+</script>
+</body>
+</html>
